@@ -1,6 +1,12 @@
 #[cfg(test)]
 mod tests {
-    use steinlib::{Edge, Parser, export, generate_random::generate_random_with_fixed_vc};
+    use steinlib::{
+        Edge, Parser, export,
+        generate_random::{
+            UpdateProbabilities, generate_random_with_fixed_vc, generate_update_sequence,
+            output_update_sequence,
+        },
+    };
 
     const SAMPLE_STP: &str = r#"
     SECTION Graph
@@ -99,6 +105,36 @@ mod tests {
         let (steiner, vc) = generate_random_with_fixed_vc(8, 3, 3);
         println!("{}", steiner.to_string());
         println!("{:?}", vc);
+
+        let update_probs = UpdateProbabilities {
+            edge_deletion: 0.0,
+            edge_insertion: 0.5,
+            terminal_deactivation: 0.0,
+            terminal_activation: 0.5,
+        };
+        let query_prob = 0.2;
+        let update_sequence = generate_update_sequence(&steiner, update_probs, query_prob);
+        println!("{:#?}", update_sequence);
+
+        assert!(true);
+    }
+
+    #[test]
+    fn update_sequence_export() {
+        let (steiner, vc) = generate_random_with_fixed_vc(512, 9, 9);
+        println!("{}", steiner.to_string());
+        println!("{:?}", vc);
+
+        let update_probs = UpdateProbabilities {
+            edge_deletion: 0.0,
+            edge_insertion: 0.5,
+            terminal_deactivation: 0.0,
+            terminal_activation: 0.5,
+        };
+        let query_prob = 0.2;
+        let update_sequence = generate_update_sequence(&steiner, update_probs, query_prob);
+
+        output_update_sequence(update_sequence, "generated_instances".to_string());
         assert!(true);
     }
 

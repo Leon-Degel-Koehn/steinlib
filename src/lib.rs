@@ -3,7 +3,7 @@ pub mod generate_random;
 
 use std::str::FromStr;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Edge {
     pub from: usize,
     pub to: usize,
