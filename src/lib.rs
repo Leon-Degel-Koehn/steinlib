@@ -1,7 +1,9 @@
-mod export;
+pub mod export;
+pub mod generate_random;
+
 use std::str::FromStr;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Edge {
     pub from: usize,
     pub to: usize,
@@ -18,6 +20,21 @@ pub struct SteinerInstance {
     pub edges: Vec<Edge>,
     pub arcs: Vec<Edge>,
     pub terminals: Vec<usize>,
+}
+
+impl SteinerInstance {
+    pub fn new(num_nodes: usize, edges: Vec<Edge>, terminals: Vec<usize>) -> Self {
+        Self {
+            num_nodes,
+            num_edges: edges.len(),
+            num_arcs: 0,
+            num_obstacles: 0,
+            num_terminals: terminals.len(),
+            edges,
+            arcs: Vec::default(),
+            terminals,
+        }
+    }
 }
 
 impl Default for SteinerInstance {

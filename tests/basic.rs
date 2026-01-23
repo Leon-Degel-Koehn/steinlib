@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use steinlib::{Edge, Parser};
+    use steinlib::{Edge, Parser, export, generate_random::generate_random_with_fixed_vc};
 
     const SAMPLE_STP: &str = r#"
     SECTION Graph
@@ -92,6 +92,14 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn generatore_test() {
+        let (steiner, vc) = generate_random_with_fixed_vc(8, 3, 3);
+        println!("{}", steiner.to_string());
+        println!("{:?}", vc);
+        assert!(true);
     }
 
     /// Helper for fuzzy float comparison in edges
