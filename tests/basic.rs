@@ -10,11 +10,13 @@ mod tests {
     E 2 3 2
     E 1 3 3
     END
+
     SECTION Terminals
     Terminals 2
     T 1
     T 3
     END
+
     EOF  
     "#;
 
@@ -74,6 +76,22 @@ mod tests {
             parsed_terminals, expected_terminals,
             "Parsed terminals do not match expected"
         );
+
+        // Test also that the parsed instance is exported correctly
+        let expected = SAMPLE_STP
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let actual = parsed
+            .to_string()
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(actual, expected);
     }
 
     /// Helper for fuzzy float comparison in edges
