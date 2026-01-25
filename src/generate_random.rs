@@ -1,4 +1,4 @@
-use crate::{Edge, SteinerInstance};
+use crate::{Edge, Parser, SteinerInstance};
 use petgraph::graph::{NodeIndex, UnGraph};
 use petgraph::visit::Bfs;
 use rand::distr::Distribution;
@@ -9,8 +9,8 @@ use rand::{Rng, rng, seq::index::sample};
 use std::collections::HashSet;
 use std::fmt::Write;
 use std::fs;
-use std::io::BufWriter;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 /*
 * Generate a random Steiner Tree problem instance on `num_vertices` vertices
@@ -96,7 +96,7 @@ pub struct UpdateProbabilities {
     pub terminal_deactivation: f32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UpdateOperation {
     EdgeInsertion(Edge),
     EdgeDeletion(Edge),
@@ -116,6 +116,66 @@ impl ToString for UpdateOperation {
         }
     }
 }
+
+impl FromStr for UpdateOperation {
+    type Err = ParseUpdateError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s
+            .chars()
+            .nth(0)
+            .expect("Tried to parse invalid update line")
+        {
+            'T' => {
+                let action = s
+                    .split(" ")
+                    .nth(1)
+                    .expect("Encountered invalid terminal update");
+                let target = s
+                    .split(" ")
+                    .nth(2)
+                    .expect("Encountered invalid terminal update");
+                let target = target
+                    .parse::<usize>()
+                    .expect("Encountered invalid terminal update");
+                if action == "A" {
+                    Ok(Self::TerminalActivation(target))
+                } else {
+                    Ok(Self::TerminalDeactivation(target))
+                }
+            }
+            'E' => {
+                let components: Vec<&str> = s.split(" ").collect();
+                let action = components[1];
+                let from_vert = components[2]
+                    .parse::<usize>()
+                    .expect("Invalid from vertex in edge update");
+                let to_vert = components[3]
+                    .parse::<usize>()
+                    .expect("Invalid from vertex in edge update");
+                let cost = components[4]
+                    .parse::<f64>()
+                    .expect("Invalid cost in edge update");
+                let target = Edge {
+                    from: from_vert,
+                    to: to_vert,
+                    cost,
+                };
+                if action == "I" {
+                    Ok(Self::EdgeInsertion(target))
+                } else {
+                    Ok(Self::EdgeDeletion(target))
+                }
+            }
+            // TODO: I think we don't need the instance
+            'Q' => Ok(Self::Query(SteinerInstance::default())),
+            _ => Err(ParseUpdateError),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ParseUpdateError;
 
 pub fn generate_update_sequence(
     instance: &SteinerInstance,
@@ -275,4 +335,74 @@ pub fn output_update_sequence(
     }
 
     Ok(())
+}
+
+pub struct DynamicInstance {
+    pub num_vertices: usize,
+    pub target_value: usize,
+    pub update_sequence: Vec<UpdateOperation>,
+    performed_steps: usize,
+}
+
+impl DynamicInstance {
+    pub fn from_str(
+        update_specs: String,
+        target_value: usize,
+        query_instance_specs: &Vec<String>,
+    ) -> Self {
+        let mut update_sequence = Vec::new();
+        let mut num_queries = 0;
+        for line in update_specs.lines() {
+            if line.starts_with("SECTION UPDATES") {
+                continue;
+            }
+            let mut next_update =
+                UpdateOperation::from_str(line).expect("Passed invalid update specs.");
+            if matches!(next_update, UpdateOperation::Query(_)) {
+                // Fill the update with the actual query instance
+                let query_instance =
+                    Parser::default().parse_stp(&query_instance_specs[num_queries]);
+                num_queries += 1;
+                next_update = UpdateOperation::Query(query_instance);
+            }
+            update_sequence.push(next_update);
+        }
+        return Self {
+            num_vertices: Self::vertices_from_updates(&update_sequence),
+            target_value,
+            update_sequence,
+            performed_steps: 0,
+        };
+    }
+
+    pub fn reset(&mut self) {
+        self.performed_steps = 0;
+    }
+
+    pub fn get_next(&mut self) -> Option<UpdateOperation> {
+        if self.performed_steps < self.update_sequence.len() {
+            let result = Some(self.update_sequence[self.performed_steps].clone());
+            self.performed_steps += 1;
+            return result;
+        }
+        return None;
+    }
+
+    fn vertices_from_updates(update_sequence: &Vec<UpdateOperation>) -> usize {
+        Self::_helper_max_vertex(
+            update_sequence
+                .iter()
+                .max_by_key(|x| Self::_helper_max_vertex(x))
+                .unwrap(),
+        )
+    }
+
+    fn _helper_max_vertex(op: &UpdateOperation) -> usize {
+        match op {
+            UpdateOperation::EdgeDeletion(e) | UpdateOperation::EdgeInsertion(e) => {
+                e.from.max(e.to)
+            }
+            _ => 0,
+        }
+    }
 }

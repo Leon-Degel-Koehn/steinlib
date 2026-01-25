@@ -10,7 +10,7 @@ pub struct Edge {
     pub cost: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SteinerInstance {
     pub num_nodes: usize,
     pub num_edges: usize,

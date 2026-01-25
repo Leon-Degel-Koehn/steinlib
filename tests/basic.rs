@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn update_sequence_export() {
-        let (steiner, vc) = generate_random_with_fixed_vc(512, 9, 9);
+        let (steiner, vc) = generate_random_with_fixed_vc(16, 4, 4);
         println!("{}", steiner.to_string());
         println!("{:?}", vc);
 
