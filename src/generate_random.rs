@@ -117,7 +117,7 @@ impl ToString for UpdateOperation {
     }
 }
 
-impl FromStr for UpdateOperation {
+impl std::str::FromStr for UpdateOperation {
     type Err = ParseUpdateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
