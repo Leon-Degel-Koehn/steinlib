@@ -174,6 +174,61 @@ impl std::str::FromStr for UpdateOperation {
     }
 }
 
+impl UpdateOperation {
+    fn from_str(s: &str) -> Result<Self, ()> {
+        match s
+            .chars()
+            .nth(0)
+            .expect("Tried to parse invalid update line")
+        {
+            'T' => {
+                let action = s
+                    .split(" ")
+                    .nth(1)
+                    .expect("Encountered invalid terminal update");
+                let target = s
+                    .split(" ")
+                    .nth(2)
+                    .expect("Encountered invalid terminal update");
+                let target = target
+                    .parse::<usize>()
+                    .expect("Encountered invalid terminal update");
+                if action == "A" {
+                    Ok(Self::TerminalActivation(target))
+                } else {
+                    Ok(Self::TerminalDeactivation(target))
+                }
+            }
+            'E' => {
+                let components: Vec<&str> = s.split(" ").collect();
+                let action = components[1];
+                let from_vert = components[2]
+                    .parse::<usize>()
+                    .expect("Invalid from vertex in edge update");
+                let to_vert = components[3]
+                    .parse::<usize>()
+                    .expect("Invalid from vertex in edge update");
+                let cost = components[4]
+                    .parse::<f64>()
+                    .expect("Invalid cost in edge update");
+                let target = Edge {
+                    from: from_vert,
+                    to: to_vert,
+                    cost,
+                };
+                if action == "I" {
+                    Ok(Self::EdgeInsertion(target))
+                } else {
+                    Ok(Self::EdgeDeletion(target))
+                }
+            }
+            // TODO: I think we don't need the instance
+            'Q' => Ok(Self::Query(SteinerInstance::default())),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ParseUpdateError;
 
