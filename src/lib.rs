@@ -3,11 +3,31 @@ pub mod generate_random;
 
 use std::str::FromStr;
 
-#[derive(Debug, PartialEq, Clone)]
+use std::hash::{Hash, Hasher};
+
+#[derive(Debug, Clone)]
 pub struct Edge {
     pub from: usize,
     pub to: usize,
     pub cost: f64,
+}
+
+impl PartialEq for Edge {
+    fn eq(&self, other: &Self) -> bool {
+        // Only compare the identifiers
+        self.from == other.from && self.to == other.to
+    }
+}
+
+// Eq has no methods; it just tells the compiler
+// that the equality logic is reflexive (a == a).
+impl Eq for Edge {}
+
+impl Hash for Edge {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.from.hash(state);
+        self.to.hash(state);
+    }
 }
 
 #[derive(Debug, Clone)]

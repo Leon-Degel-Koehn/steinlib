@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+
     use steinlib::{
         Edge, Parser, export,
         generate_random::{
@@ -100,41 +101,62 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
-    #[test]
-    fn generatore_test() {
-        let (steiner, vc) = generate_random_with_fixed_vc(8, 3, 3);
-        println!("{}", steiner.to_string());
-        println!("{:?}", vc);
+    // #[test]
+    // fn generatore_test() {
+    //     let (steiner, vc) = generate_random_with_fixed_vc(8, 3, 3);
+    //     println!("{}", steiner.to_string());
+    //     println!("{:?}", vc);
 
-        let update_probs = UpdateProbabilities {
-            edge_deletion: 0.0,
-            edge_insertion: 0.5,
-            terminal_deactivation: 0.0,
-            terminal_activation: 0.5,
-        };
-        let query_prob = 0.2;
-        let update_sequence = generate_update_sequence(&steiner, update_probs, query_prob);
-        println!("{:#?}", update_sequence);
+    //     let update_probs = UpdateProbabilities {
+    //         edge_deletion: 0.0,
+    //         edge_insertion: 0.5,
+    //         terminal_deactivation: 0.0,
+    //         terminal_activation: 0.5,
+    //     };
+    //     let query_prob = 0.2;
+    //     let update_sequence = generate_update_sequence(&steiner, update_probs, query_prob);
+    //     println!("{:#?}", update_sequence);
 
-        assert!(true);
-    }
+    //     assert!(true);
+    // }
 
     #[test]
     fn update_sequence_export() {
-        let (steiner, vc) = generate_random_with_fixed_vc(16, 4, 4);
-        println!("{}", steiner.to_string());
-        println!("{:?}", vc);
+        let replication_count = 5;
+        for n in [32, 64, 128, 256, 512, 1024, 2048] {
+            let prob_sparse_factor = if n > 256 { (n as f64).sqrt() } else { 2.0 };
+            for p in [prob_sparse_factor * (n as f64).ln() / (n as f64), 0.5] {
+                let t = (n as f64).log2().round() as usize;
+                let tau = (n as f64).log2();
+                for i in 1..replication_count + 1 {
+                    let u_tau = tau.round() as usize;
+                    println!(
+                        "Generate {}-th of  n={},p={},tau={},t={}",
+                        i, n, p, u_tau, t
+                    );
+                    let (steiner, vc) = generate_random_with_fixed_vc(n, t, u_tau, p);
+                    assert!(vc.len() <= u_tau);
+                    println!("Finished generating graph, computing updates");
 
-        let update_probs = UpdateProbabilities {
-            edge_deletion: 0.0,
-            edge_insertion: 0.5,
-            terminal_deactivation: 0.0,
-            terminal_activation: 0.5,
-        };
-        let query_prob = 0.2;
-        let update_sequence = generate_update_sequence(&steiner, update_probs, query_prob);
-
-        output_update_sequence(update_sequence, "generated_instances".to_string());
+                    let update_probs = UpdateProbabilities {
+                        edge_deletion: 0.4,
+                        edge_insertion: 0.4,
+                        terminal_deactivation: 0.1,
+                        terminal_activation: 0.1,
+                    };
+                    let query_prob = 1.0;
+                    let update_sequence =
+                        generate_update_sequence(&steiner, update_probs, query_prob, vc, false, 10);
+                    let _ = output_update_sequence(
+                        update_sequence,
+                        format!(
+                            "generated_instances_clementi/{}_n={},p={},tau={},t={}",
+                            i, n, p, u_tau, t
+                        ),
+                    );
+                }
+            }
+        }
         assert!(true);
     }
 

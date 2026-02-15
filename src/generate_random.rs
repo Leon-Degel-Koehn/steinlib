@@ -22,6 +22,7 @@ pub fn generate_random_with_fixed_vc(
     num_vertices: usize,
     num_terminals: usize,
     vc: usize,
+    p: f64,
 ) -> (SteinerInstance, Vec<usize>) {
     let cover = generate_vertex_subset(num_vertices, vc);
     let terminals = generate_vertex_subset(num_vertices, num_terminals);
@@ -34,55 +35,70 @@ pub fn generate_random_with_fixed_vc(
     let mut rand_generator = rng();
     let mut edges = Vec::new();
 
+    let i = 1;
+
     loop {
-        // 1. Add edges using the existing logic
+        // 1. CLEAR existing edges to ensure a fresh sample from G(n, p)
+        edges.clear();
+
+        // 2. Generate edges (Method A: fresh sample every time)
         for i in 1..=num_vertices {
             for j in (i + 1)..=num_vertices {
+                // Your logic: only add edges if at least one endpoint is in the cover
                 if is_in_cover[i - 1] || is_in_cover[j - 1] {
-                    let new_edge = Edge {
-                        from: i,
-                        to: j,
-                        cost: 1.0,
-                    };
-                    if rand_generator.random_bool(0.5) && !edges.contains(&new_edge) {
-                        edges.push(new_edge);
+                    if rand_generator.random_bool(p) {
+                        edges.push(Edge {
+                            from: i,
+                            to: j,
+                            cost: 1.0,
+                        });
                     }
                 }
             }
         }
 
-        // 2. Build temporary petgraph to check connectivity
-        // We map our 1-indexed edges to 0-indexed NodeIndices
+        // 3. Build temporary petgraph to check connectivity
         let pet_edges: Vec<(u32, u32)> = edges
             .iter()
             .map(|e| ((e.from - 1) as u32, (e.to - 1) as u32))
             .collect();
 
-        let g = UnGraph::<(), ()>::from_edges(&pet_edges);
+        // Ensure we account for all nodes, even if they have no edges,
+        // otherwise Bfs might panic or g might be under-sized.
+        let mut g = UnGraph::<(), ()>::with_capacity(num_vertices, pet_edges.len());
+        for _ in 0..num_vertices {
+            g.add_node(());
+        }
+        for (u, v) in pet_edges {
+            g.add_edge(NodeIndex::new(u as usize), NodeIndex::new(v as usize), ());
+        }
 
-        // 3. Connectivity Check: Can every terminal reach the first terminal?
+        // 4. Connectivity Check
         if terminals.is_empty() {
             break;
         }
 
         let mut visited_terminals = HashSet::new();
         let start_node = NodeIndex::new(terminals[0] - 1);
-        let mut bfs = Bfs::new(&g, start_node);
 
-        // Traverse all reachable nodes from the first terminal
-        while let Some(nx) = bfs.next(&g) {
-            let actual_val = nx.index() + 1;
-            if terminals.contains(&actual_val) {
-                visited_terminals.insert(actual_val);
+        // Safety check: Does the start_node actually exist in the graph?
+        if start_node.index() < g.node_count() {
+            let mut bfs = Bfs::new(&g, start_node);
+            while let Some(nx) = bfs.next(&g) {
+                let actual_val = nx.index() + 1;
+                if terminals.contains(&actual_val) {
+                    visited_terminals.insert(actual_val);
+                }
             }
         }
 
-        // 4. Terminate outer loop only if all terminals were reached
+        // 5. If all terminals reached, we have a valid G(n, 1/2) instance
         if visited_terminals.len() == terminals.len() {
             break;
         }
 
-        // If not connected, the loop continues and adds MORE edges to the existing 'edges' Vec
+        // If not connected, the loop starts over, 'edges' is cleared,
+        // and we try an entirely new configuration.
     }
 
     (SteinerInstance::new(num_vertices, edges, terminals), cover)
@@ -236,12 +252,22 @@ pub fn generate_update_sequence(
     instance: &SteinerInstance,
     update_probs: UpdateProbabilities,
     query_prob: f64,
+    vc: Vec<usize>,
+    start_empty: bool,
+    total_updates: usize,
 ) -> Vec<UpdateOperation> {
     let mut updates = Vec::new();
     let mut rng = rng();
 
     let mut current_edges: Vec<Edge> = Vec::new();
     let mut current_terminals: Vec<usize> = Vec::new();
+
+    if !start_empty {
+        current_edges = instance.edges.clone();
+        current_terminals = instance.terminals.clone();
+    }
+
+    let mut current_edges_map: HashSet<Edge> = HashSet::from_iter(current_edges.clone());
 
     let weights = [
         update_probs.edge_insertion,
@@ -252,81 +278,88 @@ pub fn generate_update_sequence(
 
     let dist = WeightedIndex::new(&weights).expect("Invalid probabilities");
 
-    loop {
-        let edges_full = current_edges.len() == instance.edges.len();
-        let terminals_full = current_terminals.len() == instance.terminals.len();
-
-        if edges_full && terminals_full {
-            break;
+    let mut all_edges: Vec<Edge> = Vec::with_capacity(vc.len() * vc.len());
+    for i in 1..vc.len() + 1 {
+        for j in i + 1..vc.len() + 1 {
+            all_edges.push(Edge {
+                from: i,
+                to: j,
+                cost: 1.0,
+            });
         }
+    }
 
-        // 1. Choose either terminal or edge update
-        // 2. choose between insert/activate or delete/deactivate
-        // 3. choose legal target of operation (edge or vertex)
+    for _ in 0..total_updates {
+        let mut update_generated = false;
+        while !update_generated {
+            // 1. Choose either terminal or edge update
+            // 2. choose between insert/activate or delete/deactivate
+            // 3. choose legal target of operation (edge or vertex)
 
-        // 1 = terminal update, 0 = edge update
-        let choice = dist.sample(&mut rng);
-        if choice == 0 && edges_full
-            || choice == 1 && current_edges.len() == 0
-            || choice == 2 && terminals_full
-            || choice == 3 && current_terminals.len() == 0
-        {
-            continue;
-        }
-
-        // terminal update
-        if choice == 2 || choice == 3 {
-            let is_activation = choice == 2;
-            let available_vertices: Vec<usize> = instance
-                .terminals
-                .clone()
-                .into_iter()
-                .filter(|i| is_activation ^ current_terminals.contains(i))
-                .collect();
-            if available_vertices.len() == 0 {
+            // 1 = terminal update, 0 = edge update
+            let choice = dist.sample(&mut rng);
+            if choice == 1 && current_edges.len() == 0
+                || choice == 3 && current_terminals.len() == 0
+            {
+                // Can't delete objects if none to sample from exist
                 continue;
             }
-            if is_activation {
-                let target = *available_vertices.choose(&mut rng).unwrap();
-                updates.push(UpdateOperation::TerminalActivation(target));
-                current_terminals.push(target);
-            } else {
-                let target = *available_vertices.choose(&mut rng).unwrap();
-                updates.push(UpdateOperation::TerminalDeactivation(target));
-                current_terminals.retain(|&x| x != target);
-            }
-        }
 
-        // edge update
-        if choice == 0 || choice == 1 {
-            let is_insertion = choice == 0;
-            let available_edges: Vec<Edge> = instance
-                .edges
-                .clone()
-                .into_iter()
-                .filter(|i| is_insertion ^ current_edges.contains(i))
-                .collect();
-            if available_edges.len() == 0 {
-                continue;
+            // terminal update
+            if choice == 2 || choice == 3 {
+                let is_activation = choice == 2;
+                let available_vertices: Vec<usize> = instance
+                    .terminals
+                    .clone()
+                    .into_iter()
+                    .filter(|i| is_activation ^ current_terminals.contains(i))
+                    .collect();
+                if available_vertices.len() == 0 {
+                    continue;
+                }
+                let target = *available_vertices.choose(&mut rng).unwrap();
+                if is_activation {
+                    updates.push(UpdateOperation::TerminalActivation(target));
+                    current_terminals.push(target);
+                } else {
+                    updates.push(UpdateOperation::TerminalDeactivation(target));
+                    current_terminals.retain(|&x| x != target);
+                }
+                update_generated = true;
             }
-            if is_insertion {
-                let target = available_edges.choose(&mut rng).unwrap().clone();
-                updates.push(UpdateOperation::EdgeInsertion(target.clone()));
-                current_edges.push(target.clone());
-            } else {
-                let target = available_edges.choose(&mut rng).unwrap().clone();
-                updates.push(UpdateOperation::EdgeDeletion(target.clone()));
-                current_edges.retain(|x| *x != target);
-            }
-        }
 
-        let do_query = random_bool(query_prob);
-        if do_query {
-            updates.push(UpdateOperation::Query(SteinerInstance::new(
-                instance.num_nodes,
-                current_edges.clone(),
-                current_terminals.clone(),
-            )));
+            // edge update
+            if choice == 0 || choice == 1 {
+                let is_insertion = choice == 0;
+                let available_edges: Vec<Edge> = all_edges
+                    .clone()
+                    .into_iter()
+                    .filter(|i| is_insertion ^ current_edges_map.contains(i))
+                    .collect();
+                if available_edges.len() == 0 {
+                    continue;
+                }
+                let target = available_edges.choose(&mut rng).unwrap().clone();
+                if is_insertion {
+                    updates.push(UpdateOperation::EdgeInsertion(target.clone()));
+                    current_edges.push(target.clone());
+                    current_edges_map.insert(target.clone());
+                } else {
+                    updates.push(UpdateOperation::EdgeDeletion(target.clone()));
+                    current_edges.retain(|x| *x != target);
+                    current_edges_map.remove(&target);
+                }
+                update_generated = true;
+            }
+
+            let do_query = random_bool(query_prob);
+            if do_query {
+                updates.push(UpdateOperation::Query(SteinerInstance::new(
+                    instance.num_nodes,
+                    current_edges.clone(),
+                    current_terminals.clone(),
+                )));
+            }
         }
     }
 
@@ -375,8 +408,28 @@ pub fn output_update_sequence(
     updates: Vec<UpdateOperation>,
     directory: String,
 ) -> std::io::Result<()> {
+    let path = PathBuf::from(&directory);
+
+    // 1. Create or Clear the directory
+    if path.exists() {
+        // Remove everything inside the directory without deleting the directory itself
+        for entry in fs::read_dir(&path)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                fs::remove_dir_all(path)?;
+            } else {
+                fs::remove_file(path)?;
+            }
+        }
+    } else {
+        // Create the directory (and any parent directories needed)
+        fs::create_dir_all(&path)?;
+    }
+
+    // 2. Original logic: Export and write files
     let (main_output, query_instances) = export_update_sequence(updates);
-    let path = PathBuf::from(directory);
+
     let mut main_path = path.clone();
     main_path.push("updates.dus");
     fs::write(main_path, main_output)?;

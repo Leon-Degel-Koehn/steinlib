@@ -1,3 +1,6 @@
 Cargo.lock
 /target
-/generated_instances
+generated_instances
+generated_instances_clementi
+generated_instances_large
+generated_instances_small
