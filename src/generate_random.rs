@@ -116,6 +116,8 @@ pub struct UpdateProbabilities {
 pub enum UpdateOperation {
     EdgeInsertion(Edge),
     EdgeDeletion(Edge),
+    VertexInsertion,
+    VertexDeletion(usize),
     TerminalActivation(usize),
     TerminalDeactivation(usize),
     Query(SteinerInstance),
@@ -127,6 +129,8 @@ impl ToString for UpdateOperation {
             UpdateOperation::Query(steiner_instance) => steiner_instance.to_string(),
             Self::EdgeInsertion(edge) => format!("E I {} {} {}", edge.from, edge.to, edge.cost),
             Self::EdgeDeletion(edge) => format!("E D {} {} {}", edge.from, edge.to, edge.cost),
+            Self::VertexInsertion => format!("V I"),
+            Self::VertexDeletion(vertex) => format!("V D {}", vertex),
             Self::TerminalActivation(vertex) => format!("T A {}", vertex),
             Self::TerminalDeactivation(vertex) => format!("T D {}", vertex),
         }
@@ -183,6 +187,32 @@ impl std::str::FromStr for UpdateOperation {
                     Ok(Self::EdgeDeletion(target))
                 }
             }
+            'V' => {
+                let components: Vec<&str> = s.split(" ").collect();
+                let action = components[1];
+                let from_vert = components[2]
+                    .parse::<usize>()
+                    .expect("Invalid from vertex in edge update");
+                let to_vert = components[3]
+                    .parse::<usize>()
+                    .expect("Invalid from vertex in edge update");
+                let cost = components[4]
+                    .parse::<f64>()
+                    .expect("Invalid cost in edge update");
+                let target = Edge {
+                    from: from_vert,
+                    to: to_vert,
+                    cost,
+                };
+                if action == "I" {
+                    Ok(Self::VertexInsertion)
+                } else {
+                    let vertex = components[2]
+                        .parse::<usize>()
+                        .expect("Invalid vertex identification");
+                    Ok(Self::VertexDeletion(vertex))
+                }
+            }
             // TODO: I think we don't need the instance
             'Q' => Ok(Self::Query(SteinerInstance::default())),
             _ => Err(ParseUpdateError),
@@ -236,6 +266,32 @@ impl UpdateOperation {
                     Ok(Self::EdgeInsertion(target))
                 } else {
                     Ok(Self::EdgeDeletion(target))
+                }
+            }
+            'V' => {
+                let components: Vec<&str> = s.split(" ").collect();
+                let action = components[1];
+                let from_vert = components[2]
+                    .parse::<usize>()
+                    .expect("Invalid from vertex in edge update");
+                let to_vert = components[3]
+                    .parse::<usize>()
+                    .expect("Invalid from vertex in edge update");
+                let cost = components[4]
+                    .parse::<f64>()
+                    .expect("Invalid cost in edge update");
+                let target = Edge {
+                    from: from_vert,
+                    to: to_vert,
+                    cost,
+                };
+                if action == "I" {
+                    Ok(Self::VertexInsertion)
+                } else {
+                    let vertex = components[2]
+                        .parse::<usize>()
+                        .expect("Invalid vertex identification");
+                    Ok(Self::VertexDeletion(vertex))
                 }
             }
             // TODO: I think we don't need the instance
