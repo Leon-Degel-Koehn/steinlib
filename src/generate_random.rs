@@ -190,20 +190,6 @@ impl std::str::FromStr for UpdateOperation {
             'V' => {
                 let components: Vec<&str> = s.split(" ").collect();
                 let action = components[1];
-                let from_vert = components[2]
-                    .parse::<usize>()
-                    .expect("Invalid from vertex in edge update");
-                let to_vert = components[3]
-                    .parse::<usize>()
-                    .expect("Invalid from vertex in edge update");
-                let cost = components[4]
-                    .parse::<f64>()
-                    .expect("Invalid cost in edge update");
-                let target = Edge {
-                    from: from_vert,
-                    to: to_vert,
-                    cost,
-                };
                 if action == "I" {
                     Ok(Self::VertexInsertion)
                 } else {
@@ -271,20 +257,6 @@ impl UpdateOperation {
             'V' => {
                 let components: Vec<&str> = s.split(" ").collect();
                 let action = components[1];
-                let from_vert = components[2]
-                    .parse::<usize>()
-                    .expect("Invalid from vertex in edge update");
-                let to_vert = components[3]
-                    .parse::<usize>()
-                    .expect("Invalid from vertex in edge update");
-                let cost = components[4]
-                    .parse::<f64>()
-                    .expect("Invalid cost in edge update");
-                let target = Edge {
-                    from: from_vert,
-                    to: to_vert,
-                    cost,
-                };
                 if action == "I" {
                     Ok(Self::VertexInsertion)
                 } else {
